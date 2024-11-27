@@ -1,4 +1,3 @@
-// TextEditor.jsx
 import React, { useState, useRef, useEffect } from "react";
 import {
   Bold,
@@ -7,8 +6,6 @@ import {
   AlignLeft,
   AlignCenter,
   AlignRight,
-  Save,
-  FileInput,
   StrikethroughIcon,
   Undo2,
   Redo2,
@@ -20,12 +17,25 @@ import {
   Search,
   Sun,
   Moon,
-  Replace,
-  TemplateIcon,
   Pencil,
   GripVertical,
   X,
 } from "lucide-react";
+import WordList from "./components/list.js";
+import Draw from "./components/draw.js";
+import UndoRedo from "./components/undo_redo.js";
+import TextPosition from "./components/text_position.js";
+import Colors from "./components/color.js";
+import FontSize from "./components/font_size.js";
+import FontFamily from "./components/font_family.js";
+import TextHighlight from "./components/text_highlight.js";
+import InsertTable from "./components/table.js";
+import ImageInsert from "./components/image.js";
+import Templates from "./components/templates.js";
+import DarkMode from "./components/dark_mode.js";
+import Print from "./components/print.js";
+import Replace from "./components/search.js";
+import Editor from "./components/editor.js";
 
 // DrawingCanvas Component
 const DrawingCanvas = ({ onSave, onClose }) => {
@@ -37,9 +47,8 @@ const DrawingCanvas = ({ onSave, onClose }) => {
     const canvas = canvasRef.current;
     const ctx = canvas.getContext("2d");
 
-    // Set canvas size to match window size
-    canvas.width = window.innerWidth - 40; // Padding
-    canvas.height = window.innerHeight - 100; // Account for header
+    canvas.width = window.innerWidth - 40;
+    canvas.height = window.innerHeight - 100;
 
     ctx.strokeStyle = "#000000";
     ctx.lineWidth = 2;
@@ -176,6 +185,7 @@ const TextEditor = () => {
     "48",
     "72",
   ];
+
   const fontFamilies = [
     "Arial",
     "Times New Roman",
@@ -197,14 +207,61 @@ const TextEditor = () => {
   useEffect(() => {
     if (editorRef.current) {
       editorRef.current.addEventListener("input", saveState);
+      editorRef.current.addEventListener("keydown", handleKeyDown);
+
+      // Initialize with a paragraph
       if (!editorRef.current.innerHTML) {
         editorRef.current.innerHTML = "<p><br></p>";
       }
+
       return () => {
         editorRef.current?.removeEventListener("input", saveState);
+        editorRef.current?.removeEventListener("keydown", handleKeyDown);
       };
     }
   }, []);
+
+  const handleKeyDown = (e) => {
+    if (e.key === "Enter") {
+      const selection = window.getSelection();
+      const range = selection.getRangeAt(0);
+      const currentBlock = range.commonAncestorContainer;
+
+      // Handle list items
+      if (currentBlock.nodeType === Node.TEXT_NODE) {
+        const parentElement = currentBlock.parentElement;
+        if (parentElement.tagName === "LI") {
+          // If list item is empty, break out of the list
+          if (!parentElement.textContent.trim()) {
+            e.preventDefault();
+            const parentList = parentElement.parentElement;
+            const paragraph = document.createElement("p");
+            paragraph.innerHTML = "<br>";
+
+            if (parentList.nextSibling) {
+              parentList.parentNode.insertBefore(
+                paragraph,
+                parentList.nextSibling,
+              );
+            } else {
+              parentList.parentNode.appendChild(paragraph);
+            }
+
+            const newRange = document.createRange();
+            newRange.setStart(paragraph, 0);
+            newRange.collapse(true);
+            selection.removeAllRanges();
+            selection.addRange(newRange);
+
+            parentElement.remove();
+            if (!parentList.children.length) {
+              parentList.remove();
+            }
+          }
+        }
+      }
+    }
+  };
 
   const saveState = () => {
     const content = editorRef.current?.innerHTML || "";
@@ -215,7 +272,43 @@ const TextEditor = () => {
   const handleFormat = (command, value = null) => {
     if (editorRef.current) {
       editorRef.current.focus();
-      document.execCommand(command, false, value);
+
+      if (
+        command === "insertUnorderedList" ||
+        command === "insertOrderedList"
+      ) {
+        const selection = window.getSelection();
+        const range = selection.getRangeAt(0);
+
+        // Get the current block element
+        let currentBlock = range.commonAncestorContainer;
+        if (currentBlock.nodeType === Node.TEXT_NODE) {
+          currentBlock = currentBlock.parentElement;
+        }
+
+        // Ensure we're working with a block element
+        if (currentBlock === editorRef.current) {
+          document.execCommand("formatBlock", false, "p");
+        }
+
+        // Apply list command
+        document.execCommand(command, false, value);
+
+        // Fix empty list items
+        const lists = editorRef.current.querySelectorAll("ul, ol");
+        lists.forEach((list) => {
+          const items = list.querySelectorAll("li");
+          items.forEach((item) => {
+            if (!item.textContent.trim()) {
+              item.innerHTML = "<br>";
+            }
+          });
+        });
+      } else {
+        document.execCommand(command, false, value);
+      }
+
+      saveState();
     }
   };
 
@@ -330,7 +423,6 @@ const TextEditor = () => {
   const handleDrop = (e) => {
     e.preventDefault();
     const text = e.dataTransfer.getData("text/plain");
-    const editorRect = editorRef.current.getBoundingClientRect();
     const range = document.caretRangeFromPoint(e.clientX, e.clientY);
     if (range) {
       const blockElement = document.createElement("div");
@@ -355,206 +447,64 @@ const TextEditor = () => {
         >
           {/* Toolbar */}
           <div className="p-2 flex items-center gap-2 border-b flex-wrap">
-            <div className="flex gap-1">
-              <button
-                onClick={handleUndo}
-                className="p-2 hover:bg-gray-100 rounded"
-                title="Undo"
-              >
-                <Undo2 size={20} />
-              </button>
-              <button
-                onClick={handleRedo}
-                className="p-2 hover:bg-gray-100 rounded"
-                title="Redo"
-              >
-                <Redo2 size={20} />
-              </button>
-            </div>
-
-            <button
-              onClick={() => setShowDrawing(true)}
-              className="p-2 hover:bg-gray-100 rounded"
-              title="Draw"
-            >
-              <Pencil size={20} />
-            </button>
-
+            <UndoRedo
+              handleUndo={handleUndo}
+              handleRedo={handleRedo}
+              Undo2={Undo2}
+              Redo2={Redo2}
+            />
+            <Draw setShowDrawing={setShowDrawing} Pencil={Pencil} />
             <div className="w-px h-6 bg-gray-300 mx-2" />
+            <TextPosition
+              handleFormat={handleFormat}
+              AlignLeft={AlignLeft}
+              AlignCenter={AlignCenter}
+              AlignRight={AlignRight}
+            />
+            <div className="w-px h-6 bg-gray-300 mx-2" />
+            <Colors handleFormat={handleFormat} />
+            <FontSize handleFormat={handleFormat} fontSizes={fontSizes} />
+            <FontFamily
+              handleFormat={handleFormat}
+              fontFamilies={fontFamilies}
+            />
+            <TextHighlight
+              handleFormat={handleFormat}
+              Bold={Bold}
+              Italic={Italic}
+              Underline={Underline}
+              StrikethroughIcon={StrikethroughIcon}
+            />
+            <div className="w-px h-6 bg-gray-300 mx-2" />
+            <WordList saveState={saveState} editorRef={editorRef} />
 
             <div className="flex gap-1">
-              <button
-                onClick={() => handleFormat("justifyLeft")}
-                className="p-2 hover:bg-gray-100 rounded"
-                title="Align Left"
-              >
-                <AlignLeft size={20} />
-              </button>
-              <button
-                onClick={() => handleFormat("justifyCenter")}
-                className="p-2 hover:bg-gray-100 rounded"
-                title="Align Center"
-              >
-                <AlignCenter size={20} />
-              </button>
-              <button
-                onClick={() => handleFormat("justifyRight")}
-                className="p-2 hover:bg-gray-100 rounded"
-                title="Align Right"
-              >
-                <AlignRight size={20} />
-              </button>
-            </div>
+              <InsertTable insertTable={insertTable} Table={Table} />
 
-            <div className="w-px h-6 bg-gray-300 mx-2" />
-
-            <div className="flex items-center gap-2">
-              <input
-                type="color"
-                onChange={(e) => handleFormat("foreColor", e.target.value)}
-                className="w-8 h-8 p-1 rounded cursor-pointer"
-                title="Text Color"
-              />
-              <input
-                type="color"
-                onChange={(e) => handleFormat("hiliteColor", e.target.value)}
-                className="w-8 h-8 p-1 rounded cursor-pointer"
-                title="Highlight Color"
+              <ImageInsert
+                handleImageInsert={handleImageInsert}
+                Image={Image}
               />
             </div>
 
-            <select
-              onChange={(e) => handleFormat("fontSize", e.target.value)}
-              className="p-2 border rounded hover:bg-gray-100"
-              title="Font Size"
-            >
-              <option value="">Font Size</option>
-              {fontSizes.map((size) => (
-                <option key={size} value={size}>
-                  {size}
-                </option>
-              ))}
-            </select>
-
-            <select
-              onChange={(e) => handleFormat("fontName", e.target.value)}
-              className="p-2 border rounded hover:bg-gray-100"
-              title="Font Family"
-            >
-              <option value="">Font Family</option>
-
-              {fontFamilies.map((font) => (
-                <option key={font} value={font}>
-                  {font}
-                </option>
-              ))}
-            </select>
-
-            <div className="flex gap-1">
-              <button
-                onClick={() => handleFormat("bold")}
-                className="p-2 hover:bg-gray-100 rounded"
-                title="Bold"
-              >
-                <Bold size={20} />
-              </button>
-              <button
-                onClick={() => handleFormat("italic")}
-                className="p-2 hover:bg-gray-100 rounded"
-                title="Italic"
-              >
-                <Italic size={20} />
-              </button>
-              <button
-                onClick={() => handleFormat("underline")}
-                className="p-2 hover:bg-gray-100 rounded"
-                title="Underline"
-              >
-                <Underline size={20} />
-              </button>
-              <button
-                onClick={() => handleFormat("strikeThrough")}
-                className="p-2 hover:bg-gray-100 rounded"
-                title="Strikethrough"
-              >
-                <StrikethroughIcon size={20} />
-              </button>
-            </div>
-
             <div className="w-px h-6 bg-gray-300 mx-2" />
 
-            <div className="flex gap-1">
-              <button
-                onClick={() => handleFormat("insertUnorderedList")}
-                className="p-2 hover:bg-gray-100 rounded"
-                title="Bullet List"
-              >
-                <List size={20} />
-              </button>
-              <button
-                onClick={() => handleFormat("insertOrderedList")}
-                className="p-2 hover:bg-gray-100 rounded"
-                title="Numbered List"
-              >
-                <ListOrdered size={20} />
-              </button>
-            </div>
+            <Templates applyTemplate={applyTemplate} />
 
-            <div className="flex gap-1">
-              <button
-                onClick={insertTable}
-                className="p-2 hover:bg-gray-100 rounded"
-                title="Insert Table"
-              >
-                <Table size={20} />
-              </button>
-              <label className="p-2 hover:bg-gray-100 rounded cursor-pointer">
-                <Image size={20} />
-                <input
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={handleImageInsert}
-                />
-              </label>
-            </div>
+            <DarkMode
+              setDarkMode={setDarkMode}
+              darkMode={darkMode}
+              Sun={Sun}
+              Moon={Moon}
+            />
 
-            <div className="w-px h-6 bg-gray-300 mx-2" />
+            <Print handlePrint={handlePrint} Printer={Printer} />
 
-            <select
-              onChange={(e) => applyTemplate(e.target.value)}
-              className="p-2 border rounded hover:bg-gray-100"
-            >
-              <option value="">Templates</option>
-              <option value="blank">Blank</option>
-              <option value="letter">Letter</option>
-              <option value="resume">Resume</option>
-              <option value="memo">Memo</option>
-            </select>
-
-            <button
-              onClick={() => setDarkMode(!darkMode)}
-              className="p-2 hover:bg-gray-100 rounded"
-              title={darkMode ? "Light Mode" : "Dark Mode"}
-            >
-              {darkMode ? <Sun size={20} /> : <Moon size={20} />}
-            </button>
-
-            <button
-              onClick={handlePrint}
-              className="p-2 hover:bg-gray-100 rounded"
-              title="Print"
-            >
-              <Printer size={20} />
-            </button>
-
-            <button
-              onClick={() => setShowSearch(!showSearch)}
-              className="p-2 hover:bg-gray-100 rounded"
-              title="Search and Replace"
-            >
-              <Search size={20} />
-            </button>
+            <Replace
+              setShowSearch={setShowSearch}
+              showSearch={showSearch}
+              Search={Search}
+            />
           </div>
 
           {/* Search and Replace Panel */}
@@ -591,20 +541,11 @@ const TextEditor = () => {
         </div>
 
         {/* Editor */}
-        <div
-          ref={editorRef}
-          className={`editor flex-1 overflow-auto p-4 ${
-            darkMode ? "bg-gray-800 text-white" : "bg-white"
-          } whitespace-pre-wrap`}
-          contentEditable
-          suppressContentEditableWarning
-          onDrop={handleDrop}
-          onDragOver={handleDragOver}
-          style={{
-            textAlign: "left",
-            direction: "ltr",
-            unicodeBidi: "normal",
-          }}
+        <Editor
+          editorRef={editorRef}
+          darkMode={darkMode}
+          handleDrop={handleDrop}
+          handleDragOver={handleDragOver}
         />
 
         {/* Drawing Canvas */}
