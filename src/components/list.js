@@ -1,62 +1,74 @@
+// WordList.jsx
+import React from "react";
 import { List, ListOrdered } from "lucide-react";
 
 const WordList = ({ saveState, editorRef }) => {
-  const handleFormat = (command, value = null) => {
-    if (editorRef.current) {
+  const handleFormat = (command) => {
+    if (!editorRef.current) {
+      console.log("Editor ref is not available");
+      return;
+    }
+
+    try {
+      // Log the current state
+      console.log("Executing command:", command);
+      console.log("Editor content before:", editorRef.current.innerHTML);
+
+      // Focus the editor first
       editorRef.current.focus();
 
-      if (
-        command === "insertUnorderedList" ||
-        command === "insertOrderedList"
-      ) {
-        const selection = window.getSelection();
-        const range = selection.getRangeAt(0);
+      // Get the current selection
+      const selection = window.getSelection();
+      const range = selection.getRangeAt(0);
 
-        // Get the current block element
-        let currentBlock = range.commonAncestorContainer;
-        if (currentBlock.nodeType === Node.TEXT_NODE) {
-          currentBlock = currentBlock.parentElement;
-        }
-
-        // Ensure we're working with a block element
-        if (currentBlock === editorRef.current) {
-          document.execCommand("formatBlock", false, "p");
-        }
-
-        // Apply list command
-        document.execCommand(command, false, value);
-
-        // Fix empty list items
-        const lists = editorRef.current.querySelectorAll("ul, ol");
-        lists.forEach((list) => {
-          const items = list.querySelectorAll("li");
-          items.forEach((item) => {
-            if (!item.textContent.trim()) {
-              item.innerHTML = "<br>";
-            }
-          });
-        });
-      } else {
-        document.execCommand(command, false, value);
+      // Ensure we're working with a block element
+      let currentBlock = range.commonAncestorContainer;
+      while (currentBlock && currentBlock.nodeType === Node.TEXT_NODE) {
+        currentBlock = currentBlock.parentNode;
       }
 
-      saveState();
+      // If we're in the editor root, wrap content in a paragraph
+      if (currentBlock === editorRef.current) {
+        document.execCommand("formatBlock", false, "p");
+      }
+
+      // Execute the list command
+      const success = document.execCommand(command, false, null);
+      console.log("Command executed successfully:", success);
+
+      // Log the result
+      console.log("Editor content after:", editorRef.current.innerHTML);
+
+      // Save state if successful
+      if (success && saveState) {
+        saveState();
+      }
+    } catch (error) {
+      console.error("Error applying list format:", error);
     }
   };
 
   return (
     <div className="flex gap-1">
       <button
-        onClick={() => handleFormat("insertUnorderedList")}
-        className="p-2 hover:bg-gray-100 rounded"
+        onClick={() => {
+          console.log("Bullet list button clicked");
+          handleFormat("insertUnorderedList");
+        }}
+        className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded"
         title="Bullet List"
+        type="button"
       >
         <List size={20} />
       </button>
       <button
-        onClick={() => handleFormat("insertOrderedList")}
-        className="p-2 hover:bg-gray-100 rounded"
+        onClick={() => {
+          console.log("Numbered list button clicked");
+          handleFormat("insertOrderedList");
+        }}
+        className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded"
         title="Numbered List"
+        type="button"
       >
         <ListOrdered size={20} />
       </button>

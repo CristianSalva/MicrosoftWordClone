@@ -204,6 +204,74 @@ const TextEditor = () => {
     memo: `MEMORANDUM\n\nTO: [Recipient]\nFROM: [Sender]\nDATE: [Date]\nSUBJECT: [Subject]\n\nBody of memo goes here.`,
   };
 
+  const saveState = () => {
+    const content = editorRef.current?.innerHTML || "";
+    setUndoStack((prev) => [...prev, content]);
+    setRedoStack([]);
+  };
+
+  const handleFormat = (command, value = null) => {
+    if (editorRef.current) {
+      editorRef.current.focus();
+
+      if (command === "fontSize") {
+        const selection = window.getSelection();
+        if (selection.rangeCount > 0) {
+          const range = selection.getRangeAt(0);
+
+          // Instead of using surroundContents, we'll modify the fontSize directly
+          if (!selection.isCollapsed) {
+            // Create a CSS style for fontSize
+            const fontSize = `${value}px`;
+
+            // Apply fontSize to existing content
+            const fragment = range.extractContents();
+            const span = document.createElement("span");
+            span.style.fontSize = fontSize;
+
+            // Handle nested spans
+            const existingSpans = fragment.querySelectorAll("span");
+            existingSpans.forEach((existingSpan) => {
+              existingSpan.style.fontSize = fontSize;
+            });
+
+            // If there are no spans, wrap everything in a new span
+            if (existingSpans.length === 0) {
+              span.appendChild(fragment);
+              range.insertNode(span);
+            } else {
+              range.insertNode(fragment);
+            }
+
+            // Restore selection
+            selection.removeAllRanges();
+            selection.addRange(range);
+          } else {
+            // If no text is selected, prepare for next input
+            const span = document.createElement("span");
+            span.style.fontSize = `${value}px`;
+            span.appendChild(document.createTextNode("\u200B")); // Zero-width space
+            range.insertNode(span);
+
+            // Move cursor inside the span
+            range.setStart(span.firstChild, 1);
+            range.setEnd(span.firstChild, 1);
+            selection.removeAllRanges();
+            selection.addRange(range);
+          }
+        }
+      } else if (
+        command === "insertUnorderedList" ||
+        command === "insertOrderedList"
+      ) {
+        // ... rest of your existing list handling code ...
+      } else {
+        document.execCommand(command, false, value);
+      }
+      saveState();
+    }
+  };
+
   useEffect(() => {
     if (editorRef.current) {
       editorRef.current.addEventListener("input", saveState);
@@ -260,55 +328,6 @@ const TextEditor = () => {
           }
         }
       }
-    }
-  };
-
-  const saveState = () => {
-    const content = editorRef.current?.innerHTML || "";
-    setUndoStack((prev) => [...prev, content]);
-    setRedoStack([]);
-  };
-
-  const handleFormat = (command, value = null) => {
-    if (editorRef.current) {
-      editorRef.current.focus();
-
-      if (
-        command === "insertUnorderedList" ||
-        command === "insertOrderedList"
-      ) {
-        const selection = window.getSelection();
-        const range = selection.getRangeAt(0);
-
-        // Get the current block element
-        let currentBlock = range.commonAncestorContainer;
-        if (currentBlock.nodeType === Node.TEXT_NODE) {
-          currentBlock = currentBlock.parentElement;
-        }
-
-        // Ensure we're working with a block element
-        if (currentBlock === editorRef.current) {
-          document.execCommand("formatBlock", false, "p");
-        }
-
-        // Apply list command
-        document.execCommand(command, false, value);
-
-        // Fix empty list items
-        const lists = editorRef.current.querySelectorAll("ul, ol");
-        lists.forEach((list) => {
-          const items = list.querySelectorAll("li");
-          items.forEach((item) => {
-            if (!item.textContent.trim()) {
-              item.innerHTML = "<br>";
-            }
-          });
-        });
-      } else {
-        document.execCommand(command, false, value);
-      }
-
-      saveState();
     }
   };
 
